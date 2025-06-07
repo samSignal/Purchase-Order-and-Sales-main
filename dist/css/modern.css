@@ -1,0 +1,170 @@
+:root {
+    --primary-color: #2196F3;
+    --secondary-color: #f8f9fa;
+    --text-dark: #495057;
+    --text-light: #6c757d;
+    --border-color: #eee;
+    --card-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    --success-color: #28a745;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+}
+
+body {
+    background: var(--secondary-color);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Modern Card Styling */
+.card {
+    background: #fff;
+    border: none;
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    background: #fff;
+    border-bottom: 1px solid var(--border-color);
+    padding: 1.25rem;
+    border-radius: 12px 12px 0 0;
+}
+
+/* Statistics Cards */
+.stats-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--card-shadow);
+}
+
+.stats-card h3 {
+    color: var(--text-light);
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+
+.stats-card h2 {
+    color: var(--text-dark);
+    font-size: 1.75rem;
+    margin: 0;
+}
+
+/* Modern Table Styling */
+.table {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+.table thead th {
+    background: var(--secondary-color);
+    border-bottom: 2px solid var(--border-color);
+    color: var(--text-dark);
+    font-weight: 600;
+    padding: 1rem;
+}
+
+.table td {
+    padding: 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Modern Button Styling */
+.btn-primary {
+    background: var(--primary-color);
+    border: none;
+    border-radius: 6px;
+    padding: 0.625rem 1.25rem;
+    font-weight: 500;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+}
+
+/* Modern Form Controls */
+.form-control {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.625rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+/* Modern Navigation */
+.nav-link {
+    color: var(--text-dark);
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+}
+
+.nav-link:hover {
+    background: rgba(33, 150, 243, 0.1);
+}
+
+.nav-link.active {
+    background: var(--primary-color);
+    color: #fff;
+}
+
+/* Status Badges */
+.badge {
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.badge-success {
+    background: rgba(40, 167, 69, 0.1);
+    color: var(--success-color);
+}
+
+.badge-warning {
+    background: rgba(255, 193, 7, 0.1);
+    color: var(--warning-color);
+}
+
+.badge-danger {
+    background: rgba(220, 53, 69, 0.1);
+    color: var(--danger-color);
+}
+
+/* Modern Search Box */
+.search-box {
+    position: relative;
+}
+
+.search-box input {
+    padding-left: 2.5rem;
+    background: #fff;
+}
+
+.search-box i {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-light);
+}
+
+/* Modern Filters */
+.filter-section {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.filter-section .form-control {
+    max-width: 200px;
+}
