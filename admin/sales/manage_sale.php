@@ -32,6 +32,7 @@ if(isset($_GET['id'])){
     <div class="card-body">
         <form action="" id="sale-form">
             <input type="hidden" name="id" value="<?php echo isset($id) ? $id : '' ?>">
+            <input type="hidden" name="stock_ids" value="<?php echo isset($stock_ids) ? $stock_ids : '' ?>">
             <div class="container-fluid">
                 <div class="row">
                     <div class="col-md-6">
@@ -52,23 +53,27 @@ if(isset($_GET['id'])){
                         <?php 
                             $item_arr = array();
                             $cost_arr = array();
+                            $stock_arr = array(); // Added to track stock IDs
                             if ($user_type == 2) { 
-                                $item = $conn->query("SELECT i.*, COALESCE(pa.quantity_remaining, 0) as remaining 
+                                $item = $conn->query("SELECT i.*, s.id as stock_id, COALESCE(pa.quantity_remaining, 0) as remaining 
                                 FROM item_list i 
                                 INNER JOIN product_assignments pa ON i.id = pa.product_id 
+                                LEFT JOIN stock_list s ON i.id = s.item_id
                                 WHERE i.status = 1 
                                 AND pa.sales_rep_id = '$current_user_id' 
                                 AND pa.quantity_remaining > 0 
                                 ORDER BY i.name ASC");
                             } else {
-                                $item = $conn->query("SELECT * 
-                                FROM item_list 
-                                WHERE status = 1 
-                                ORDER BY name ASC");
+                                $item = $conn->query("SELECT i.*, s.id as stock_id 
+                                FROM item_list i
+                                LEFT JOIN stock_list s ON i.id = s.item_id 
+                                WHERE i.status = 1 
+                                ORDER BY i.name ASC");
                             }
                             while($row = $item->fetch_assoc()):
                                 $item_arr[$row['id']] = $row;
                                 $cost_arr[$row['id']] = $row['sell_price'];
+                                $stock_arr[$row['id']] = $row['stock_id']; // Store stock ID
                             endwhile;
                         ?>
                         <div class="col-md-3">
@@ -80,6 +85,7 @@ if(isset($_GET['id'])){
                                         <option 
                                             value="<?php echo $k ?>" 
                                             data-available="<?php echo ($user_type == 2) ? $v['remaining'] : '' ?>"
+                                            data-stock-id="<?php echo $stock_arr[$k] ?>"
                                         >
                                             <?php echo $v['name'] ?>
                                             <?php if($user_type == 2): ?>
@@ -147,6 +153,7 @@ if(isset($_GET['id'])){
                                 <input type="hidden" name="qty[]" value="<?php echo $row['quantity']; ?>">
                                 <input type="hidden" name="price[]" value="<?php echo $row['price']; ?>">
                                 <input type="hidden" name="total[]" value="<?php echo $row['total']; ?>">
+                                <input type="hidden" name="stock_id[]" value="<?php echo $row['id']; ?>">
                             </td>
                             <td class="py-1 px-2 text-center unit">
                             <?php echo $row['unit']; ?>
@@ -202,6 +209,7 @@ if(isset($_GET['id'])){
             <input type="hidden" name="qty[]">
             <input type="hidden" name="price[]">
             <input type="hidden" name="total[]">
+            <input type="hidden" name="stock_id[]">
         </td>
         <td class="py-1 px-2 text-center unit">
         </td>
@@ -216,6 +224,7 @@ if(isset($_GET['id'])){
 <script>
     var items = $.parseJSON('<?php echo json_encode($item_arr) ?>')
     var costs = $.parseJSON('<?php echo json_encode($cost_arr) ?>')
+    var stocks = $.parseJSON('<?php echo json_encode($stock_arr) ?>')
     
     $(function(){
         $('.select2').select2({
@@ -227,8 +236,8 @@ if(isset($_GET['id'])){
             var qty = $('#qty').val() > 0 ? $('#qty').val() : 0;
             var unit = $('#unit').val()
             var price = costs[item] || 0
+            var stock_id = $('#item_id option:selected').data('stock-id')
             var total = parseFloat(qty) *parseFloat(price)
-            // console.log(supplier,item)
             var item_name = items[item].name || 'N/A';
             var item_description = items[item].description || 'N/A';
             var tr = $('#clone_list tr').clone()
@@ -245,6 +254,7 @@ if(isset($_GET['id'])){
             tr.find('[name="qty[]"]').val(qty)
             tr.find('[name="price[]"]').val(price)
             tr.find('[name="total[]"]').val(total)
+            tr.find('[name="stock_id[]"]').val(stock_id)
             tr.attr('data-id',item)
             tr.find('.qty .visible').text(qty)
             tr.find('.unit').text(unit)
@@ -270,6 +280,14 @@ if(isset($_GET['id'])){
             var _this = $(this)
 			 $('.err-msg').remove();
 			start_loader();
+            
+            // Collect all stock IDs
+            var stockIds = [];
+            $('input[name="stock_id[]"]').each(function() {
+                if($(this).val()) stockIds.push($(this).val());
+            });
+            $('[name="stock_ids"]').val(stockIds.join(','));
+            
 			$.ajax({
 				url:_base_url_+"classes/Master.php?f=save_sale",
 				data: new FormData($(this)[0]),
@@ -317,20 +335,13 @@ if(isset($_GET['id'])){
         calc()
         if($('table#list tbody tr').length <= 0)
             $('#supplier_id').removeAttr('readonly')
-
     }
     function calc(){
         var grand_total = 0;
         $('table#list tbody input[name="total[]"]').each(function(){
             grand_total += parseFloat($(this).val())
-            
         })
-       
         $('table#list tfoot .grand-total').text(parseFloat(grand_total).toLocaleString('en-US',{style:'decimal',maximumFractionDigit:2}))
         $('[name="amount"]').val(parseFloat(grand_total))
-
     }
 </script>
-
-
-
