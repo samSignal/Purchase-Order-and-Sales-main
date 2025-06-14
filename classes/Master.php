@@ -599,82 +599,158 @@ Class Master extends DBConnection {
 		return json_encode($resp);
 
 	}
-	function save_sale(){
-		if (!isset($_SESSION['userdata']['user_id'])) {
-			return json_encode(['status' => 'failed', 'msg' => 'User not logged in.']);
-		}
-	
-		$user_id = $_SESSION['userdata']['user_id'];
-		
-		if(empty($_POST['id'])){
-			$prefix = "SALE";
-			$code = sprintf("%'.04d",1);
-			while(true){
-				$check_code = $this->conn->query("SELECT * FROM `sales_list` where sales_code ='".$prefix.'-'.$code."' ")->num_rows;
-				if($check_code > 0){
-					$code = sprintf("%'.04d",$code+1);
-				}else{
-					break;
-				}
-			}
-			$_POST['sales_code'] = $prefix."-".$code;
-		}
-		extract($_POST);
-		$data = "";
-		foreach($_POST as $k =>$v){
-			if(!in_array($k,array('id')) && !is_array($_POST[$k])){
-				if(!is_numeric($v))
-				$v= $this->conn->real_escape_string($v);
-				if(!empty($data)) $data .=", ";
-				$data .=" `{$k}` = '{$v}' ";
-			}
-		}
-		$data .= ", `user_id` = '{$user_id}'";
-		if(empty($id)){
-			$sql = "INSERT INTO `sales_list` set {$data}";
-		}else{
-			$sql = "UPDATE `sales_list` set {$data} where id = '{$id}'";
-		}
-		$save = $this->conn->query($sql);
-		if($save){
-			$resp['status'] = 'success';
-			if(empty($id))
-			$sale_id = $this->conn->insert_id;
-			else
-			$sale_id = $id;
-			$resp['id'] = $sale_id;
-			$data = "";
-			$sids = array();
-			$get = $this->conn->query("SELECT * FROM `sales_list` where id = '{$sale_id}'");
-			if($get->num_rows > 0){
-				$res = $get->fetch_array();
-				if(!empty($res['stock_ids'])){
-					$this->conn->query("DELETE FROM `stock_list` where id in ({$res['stock_ids']}) ");
-				}
-			}
-			foreach($item_id as $k =>$v){
-				$sql = "INSERT INTO `stock_list` set item_id='{$v}', `quantity` = '{$qty[$k]}', `unit` = '{$unit[$k]}', `price` = '{$price[$k]}', `total` = '{$total[$k]}', `type` = 2 ";
-				$save = $this->conn->query($sql);
-				if($save){
-					$sids[] = $this->conn->insert_id;
-				}
-			}
-			$sids = implode(',',$sids);
-			$this->conn->query("UPDATE `sales_list` set stock_ids = '{$sids}' where id = '{$sale_id}'");
-		}else{
-			$resp['status'] = 'failed';
-			$resp['msg'] = 'An error occured. Error: '.$this->conn->error;
-		}
-		if($resp['status'] == 'success'){
-			if(empty($id)){
-				$this->settings->set_flashdata('success'," New Sales Record was Successfully created.");
-			}else{
-				$this->settings->set_flashdata('success'," Sales Record's Successfully updated.");
-			}
-		}
+function save_sale(){
+    $this->conn->begin_transaction();
+    try {
+        // 1. Authentication Check
+        if (!isset($_SESSION['userdata']['user_id'])) {
+            throw new Exception('User not logged in.');
+        }
+        $user_id = $_SESSION['userdata']['user_id'];
+        $user_type = $_SESSION['userdata']['type'] ?? 1; // 1=admin, 2=sales rep
 
-		return json_encode($resp);
-	}
+        // 2. Sales Code Generation (for new sales)
+        if(empty($_POST['id'])) {
+            $prefix = "SALE";
+            $code = sprintf("%'.04d",1);
+            while(true) {
+                $check = $this->conn->prepare("SELECT id FROM `sales_list` WHERE sales_code = ?");
+                $sales_code = $prefix.'-'.$code;
+                $check->bind_param("s", $sales_code);
+                $check->execute();
+                $result = $check->get_result();
+                if($result->num_rows > 0) {
+                    $code = sprintf("%'.04d",$code+1);
+                } else {
+                    break;
+                }
+            }
+            $_POST['sales_code'] = $prefix."-".$code;
+        }
+
+        // 3. Prepare Sale Data
+        $data = [];
+        foreach($_POST as $k => $v) {
+            if(!in_array($k, ['id', 'item_id', 'qty', 'unit', 'price', 'total', 'stock_ids']) && !is_array($v)) {
+                $data[$k] = is_numeric($v) ? $v : $this->conn->real_escape_string($v);
+            }
+        }
+        $data['user_id'] = $user_id;
+
+        // 4. Validate Sales Rep Stock (if user is sales rep)
+        if ($user_type == 2) {
+            foreach($_POST['item_id'] as $k => $item_id) {
+                $qty = (float)$_POST['qty'][$k];
+                $check = $this->conn->prepare("SELECT quantity_remaining FROM product_assignments WHERE sales_rep_id = ? AND product_id = ?");
+                $check->bind_param("ii", $user_id, $item_id);
+                $check->execute();
+                $result = $check->get_result();
+                if ($result->num_rows == 0) {
+                    throw new Exception("You are not assigned to sell item ID: $item_id");
+                }
+                $assignment = $result->fetch_assoc();
+                if ($qty > $assignment['quantity_remaining']) {
+                    throw new Exception("Insufficient assigned stock for item ID: $item_id");
+                }
+            }
+        } else {
+            // For admin, check main stock
+            foreach($_POST['item_id'] as $k => $item_id) {
+                $qty = (float)$_POST['qty'][$k];
+                $in = $this->conn->query("SELECT SUM(quantity) as total FROM stock_list WHERE item_id = '$item_id' AND type = 1")->fetch_array()['total'];
+                $out = $this->conn->query("SELECT SUM(quantity) as total FROM stock_list WHERE item_id = '$item_id' AND type = 2")->fetch_array()['total'];
+                $available = $in - $out;
+                if ($qty > $available) {
+                    throw new Exception("Insufficient main stock for item ID: $item_id");
+                }
+            }
+        }
+
+        // 5. Save Sale Record
+        if(empty($_POST['id'])) {
+            $fields = implode(', ', array_map(fn($k) => "`$k`", array_keys($data)));
+            $values = implode(', ', array_fill(0, count($data), '?'));
+            $types = str_repeat('s', count($data));
+            $stmt = $this->conn->prepare("INSERT INTO `sales_list` ($fields) VALUES ($values)");
+            $stmt->bind_param($types, ...array_values($data));
+            $stmt->execute();
+            $sale_id = $this->conn->insert_id;
+        } else {
+            $sale_id = $_POST['id'];
+            $set = [];
+            foreach($data as $k => $v) {
+                $set[] = "`$k`=?";
+            }
+            $types = str_repeat('s', count($data));
+            $stmt = $this->conn->prepare("UPDATE `sales_list` SET ".implode(', ', $set)." WHERE id=?");
+            $params = array_values($data);
+            $params[] = $sale_id;
+            $types .= 'i';
+            $stmt->bind_param($types, ...$params);
+            $stmt->execute();
+            // Remove old stock_list if updating
+            $get = $this->conn->query("SELECT stock_ids FROM `sales_list` WHERE id = '{$sale_id}'");
+            if($get && $row = $get->fetch_assoc()) {
+                if(!empty($row['stock_ids'])) {
+                    $this->conn->query("DELETE FROM `stock_list` WHERE id IN ({$row['stock_ids']})");
+                }
+            }
+        }
+
+        // 6. Process Items and Stock
+        $sids = [];
+        foreach($_POST['item_id'] as $k => $item_id) {
+            $qty = (float)$_POST['qty'][$k];
+            $price = (float)$_POST['price'][$k];
+            $total = (float)$_POST['total'][$k];
+            $unit = $this->conn->real_escape_string($_POST['unit'][$k]);
+
+            // Create stock record for both admin and sales rep
+            $stock = $this->conn->prepare("INSERT INTO `stock_list` (item_id, quantity, unit, price, total, type) VALUES (?, ?, ?, ?, ?, 2)");
+            $stock->bind_param("idssd", $item_id, $qty, $unit, $price, $total);
+            $stock->execute();
+            $sids[] = $this->conn->insert_id;
+
+            if ($user_type == 2) {
+                // Deduct from assigned stock for sales rep
+                $update = $this->conn->prepare("UPDATE product_assignments SET quantity_remaining = quantity_remaining - ? WHERE sales_rep_id = ? AND product_id = ?");
+                $update->bind_param("dii", $qty, $user_id, $item_id);
+                $update->execute();
+                if ($update->affected_rows == 0) {
+                    throw new Exception("Failed to update assigned stock for item ID: $item_id");
+                }
+            }
+
+            // Record stock movement
+            $from_user = ($user_type == 2) ? $user_id : 1; // 1 for admin
+            $movement = $this->conn->prepare("INSERT INTO stock_movements (product_id, from_user, to_user, quantity, movement_type, reference_id) VALUES (?, ?, 0, ?, 'sale', ?)");
+            $movement->bind_param("iiii", $item_id, $from_user, $qty, $sale_id);
+            $movement->execute();
+        }
+
+        // 7. Update sale with stock IDs for both admin and sales rep
+        if (!empty($sids)) {
+            $this->conn->query("UPDATE `sales_list` SET stock_ids = '".implode(',',$sids)."' WHERE id = '$sale_id'");
+        }
+
+        $this->conn->commit();
+        $resp = [
+            'status' => 'success',
+            'id' => $sale_id,
+            'msg' => empty($_POST['id']) ? 'New Sales Record was Successfully created.' : "Sales Record's Successfully updated."
+        ];
+        $this->settings->set_flashdata('success', $resp['msg']);
+    } catch (Exception $e) {
+        $this->conn->rollback();
+        $resp = [
+            'status' => 'failed',
+            'msg' => 'Error: ' . $e->getMessage()
+        ];
+    }
+    return json_encode($resp);
+}
+	
+	
 	function delete_sale(){
 		extract($_POST);
 		$get = $this->conn->query("SELECT * FROM sales_list where id = '{$id}'");
