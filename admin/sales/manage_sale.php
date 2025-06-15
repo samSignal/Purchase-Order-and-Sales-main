@@ -55,7 +55,7 @@ if(isset($_GET['id'])){
                             $cost_arr = array();
                             $stock_arr = array(); // Added to track stock IDs
                             if ($user_type == 2) { 
-                                $item = $conn->query("SELECT i.*, s.id as stock_id, COALESCE(pa.quantity_remaining, 0) as remaining 
+                                $item = $conn->query("SELECT i.*, s.id as stock_id, pa.quantity_remaining as remaining 
                                 FROM item_list i 
                                 INNER JOIN product_assignments pa ON i.id = pa.product_id 
                                 LEFT JOIN stock_list s ON i.id = s.item_id
@@ -64,10 +64,14 @@ if(isset($_GET['id'])){
                                 AND pa.quantity_remaining > 0 
                                 ORDER BY i.name ASC");
                             } else {
-                                $item = $conn->query("SELECT i.*, s.id as stock_id 
+                                $item = $conn->query("SELECT i.*, s.id as stock_id, 
+                                COALESCE((SELECT SUM(quantity) FROM stock_list WHERE item_id = i.id AND type = 1), 0) -
+                                COALESCE((SELECT SUM(quantity) FROM stock_list WHERE item_id = i.id AND type = 2), 0) 
+                                as remaining 
                                 FROM item_list i
-                                LEFT JOIN stock_list s ON i.id = s.item_id 
-                                WHERE i.status = 1 
+                                LEFT JOIN stock_list s ON i.id = s.item_id
+                                WHERE i.status = 1 ".
+                                ($user_type == 2 ? "AND pa.sales_rep_id = '$current_user_id'" : "")." 
                                 ORDER BY i.name ASC");
                             }
                             while($row = $item->fetch_assoc()):
@@ -81,18 +85,48 @@ if(isset($_GET['id'])){
                                 <label for="item_id" class="control-label">Item</label>
                                 <select id="item_id" class="custom-select select2">
                                     <option disabled selected></option>
+                                    // In the item option display
                                     <?php foreach($item_arr as $k => $v): ?>
                                         <option 
-                                            value="<?php echo $k ?>" 
-                                            data-available="<?php echo ($user_type == 2) ? $v['remaining'] : '' ?>"
+                                            value="<?php echo $k ?>"
+                                            data-available="<?php echo $v['remaining'] ?>"
                                             data-stock-id="<?php echo $stock_arr[$k] ?>"
+                                            class="<?php echo $v['remaining'] <= 0 ? 'text-danger' : '' ?>"
+                                            <?php echo $v['remaining'] <= 0 ? 'disabled' : '' ?>
                                         >
                                             <?php echo $v['name'] ?>
-                                            <?php if($user_type == 2): ?>
-                                                (Available: <?php echo $v['remaining'] ?>)
-                                            <?php endif; ?>
+                                            <span class="text-muted">(Available: <?php echo $v['remaining'] ?>)</span>
                                         </option>
                                     <?php endforeach; ?>
+                                    
+                                    // In the JavaScript section
+                                    $(function(){
+                                        $('#item_id').on('change', function() {
+                                            var available = $(this).find('option:selected').data('available') || 0;
+                                            $('#qty').attr({
+                                                'max': available,
+                                                'title': 'Maximum quantity: ' + available
+                                            });
+                                        });
+                                    
+                                        $('#add_to_list').click(function(){
+                                            var available = $('#item_id option:selected').data('available');
+                                            if(<?php echo $user_type ?> == 2 && $('#qty').val() > available) {
+                                                alert_toast('Quantity exceeds available stock of ' + available, 'error');
+                                                return false;
+                                            }
+                                            // ... existing add to list code ...
+                                        });
+                                    
+                                        // Add input validation for quantity field
+                                        $('#qty').on('input', function() {
+                                            var max = parseFloat($(this).attr('max')) || Infinity;
+                                            if(parseFloat($(this).val()) > max) {
+                                                $(this).val(max);
+                                                alert_toast('Adjusted quantity to maximum available stock', 'warning');
+                                            }
+                                        });
+                                    });
                                 </select>
                             </div>
                         </div>
