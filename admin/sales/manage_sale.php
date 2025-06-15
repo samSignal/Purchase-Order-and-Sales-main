@@ -276,10 +276,17 @@ if(isset($_GET['id'])){
             $('#supplier_id').attr('readonly','readonly')
         })
         $('#sale-form').submit(function(e){
-			e.preventDefault();
-            var _this = $(this)
-			 $('.err-msg').remove();
-			start_loader();
+            e.preventDefault();
+            
+            // Add validation check here
+            if($('table#list tbody tr').length === 0) {
+                alert_toast('Please add at least one item before submitting', 'error');
+                return false;
+            }
+            
+            var _this = $(this);
+            $('.err-msg').remove();
+            start_loader();
             
             // Collect all stock IDs
             var stockIds = [];
@@ -288,38 +295,38 @@ if(isset($_GET['id'])){
             });
             $('[name="stock_ids"]').val(stockIds.join(','));
             
-			$.ajax({
-				url:_base_url_+"classes/Master.php?f=save_sale",
-				data: new FormData($(this)[0]),
+            $.ajax({
+                url:_base_url_+"classes/Master.php?f=save_sale",
+                data: new FormData($(this)[0]),
                 cache: false,
                 contentType: false,
                 processData: false,
                 method: 'POST',
                 type: 'POST',
                 dataType: 'json',
-				error:err=>{
-					console.log(err)
-					alert_toast("An error occured",'error');
-					end_loader();
-				},
-				success:function(resp){
-					if(resp.status == 'success'){
-						location.replace(_base_url_+"admin/?page=sales/view_sale&id="+resp.id);
-					}else if(resp.status == 'failed' && !!resp.msg){
+                error:err=>{
+                    console.log(err)
+                    alert_toast("An error occured",'error');
+                    end_loader();
+                },
+                success:function(resp){
+                    if(resp.status == 'success'){
+                        location.replace(_base_url_+"admin/?page=sales/view_sale&id="+resp.id);
+                    }else if(resp.status == 'failed' && !!resp.msg){
                         var el = $('<div>')
                             el.addClass("alert alert-danger err-msg").text(resp.msg)
                             _this.prepend(el)
                             el.show('slow')
                             end_loader()
                     }else{
-						alert_toast("An error occured",'error');
-						end_loader();
+                        alert_toast("An error occured",'error');
+                        end_loader();
                         console.log(resp)
-					}
+                    }
                     $('html,body').animate({scrollTop:0},'fast')
-				}
-			})
-		})
+                }
+            })
+        })
 
         if('<?php echo isset($id) && $id > 0 ?>' == 1){
             calc()
