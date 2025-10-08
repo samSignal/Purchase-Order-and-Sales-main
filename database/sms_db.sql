@@ -652,6 +652,64 @@ ALTER TABLE `stock_list`
 ALTER TABLE `user_roles`
   ADD CONSTRAINT `user_roles_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `user_roles_ibfk_2` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `product_assignments`
+--
+
+CREATE TABLE IF NOT EXISTS `product_assignments` (
+  `id` int(30) NOT NULL AUTO_INCREMENT,
+  `sales_rep_id` int(50) NOT NULL,
+  `product_id` int(30) NOT NULL,
+  `quantity_assigned` int(30) NOT NULL DEFAULT 0,
+  `quantity_remaining` int(30) NOT NULL DEFAULT 0,
+  `assigned_by` int(50) DEFAULT NULL,
+  `assigned_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_rep_product` (`sales_rep_id`, `product_id`),
+  KEY `idx_product` (`product_id`),
+  KEY `idx_sales_rep` (`sales_rep_id`),
+  KEY `idx_assigned_by` (`assigned_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Constraints for table `product_assignments`
+--
+ALTER TABLE `product_assignments`
+  ADD CONSTRAINT `fk_pa_product` FOREIGN KEY (`product_id`) REFERENCES `item_list` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_pa_sales_rep` FOREIGN KEY (`sales_rep_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_pa_assigned_by` FOREIGN KEY (`assigned_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `stock_movements`
+--
+
+CREATE TABLE IF NOT EXISTS `stock_movements` (
+  `id` int(30) NOT NULL AUTO_INCREMENT,
+  `product_id` int(30) NOT NULL,
+  `from_user` int(50) NOT NULL DEFAULT 0,
+  `to_user` int(50) NOT NULL DEFAULT 0,
+  `quantity` int(30) NOT NULL,
+  `movement_type` varchar(20) NOT NULL,
+  `reference_id` int(30) DEFAULT NULL,
+  `date_created` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_product` (`product_id`),
+  KEY `idx_from_user` (`from_user`),
+  KEY `idx_to_user` (`to_user`),
+  KEY `idx_reference` (`reference_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Constraints for table `stock_movements`
+--
+ALTER TABLE `stock_movements`
+  ADD CONSTRAINT `fk_sm_product` FOREIGN KEY (`product_id`) REFERENCES `item_list` (`id`) ON DELETE CASCADE;
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
